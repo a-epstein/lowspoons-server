@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/kataras/iris"
@@ -27,9 +29,12 @@ func genToken(name string, session int64) (string, error) {
 
 	expires := time.Now().Add(time.Hour * 72).Unix()
 
+	fmt.Println(session)
+	fmt.Println(strconv.FormatInt(session, 10))
+
 	claims["name"] = name
 	claims["exp"] = expires
-	claims["jti"] = session
+	claims["jti"] = strconv.FormatInt(session, 10)
 
 	// Generate encoded token and send it as response.
 	return token.SignedString([]byte("jwj3ofjfewj1j"))

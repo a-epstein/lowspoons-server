@@ -24,6 +24,7 @@ type UserServiceImpl interface {
 	New(handle string) (User, error)
 	GetByName(handle string) (User, error)
 	Get(id int64) (User, error)
+	GetBySession(id int64) (User, error)
 }
 
 type UserService struct {
@@ -51,7 +52,17 @@ func (u *UserService) Get(id int64) (User, error) {
 
 func (u *UserService) GetByName(name string) (User, error) {
 	user := User{}
-	res := u.DB.Where("handle = ?", name).First(&user)
+	res := u.DB.Where(&User{Handle: name}).First(&user)
+
+	if res.Error != nil || res.RecordNotFound() {
+		return user, res.Error
+	}
+	return user, nil
+}
+
+func (u *UserService) GetBySession(id int64) (User, error) {
+	user := User{}
+	res := u.DB.Where(&User{SessionID: id}).First(&user)
 
 	if res.Error != nil || res.RecordNotFound() {
 		return user, res.Error

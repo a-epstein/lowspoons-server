@@ -1,11 +1,17 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/jinzhu/gorm"
 )
+
+type RawTodo struct {
+	Title     string `json:"title"`
+	Completed bool   `json:"completed"`
+}
 
 type Todo struct {
 	ID        int64     `json:"-" gorm:"type:bigint;primary_key"`
@@ -13,9 +19,9 @@ type Todo struct {
 	Completed bool      `json:"completed" gorm:"type:bool"`
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`
-	Group     Group     `json:"group"`
-	Owner     User      `json:"owner"`
-	Users     []*User   `gorm:"many2many:user_todos"`
+	Group     Group     `json:"group,omitempty"`
+	Owner     User      `json:"owner,omitempty"`
+	Users     []*User   `json:"-" gorm:"many2many:user_todos"`
 }
 
 type Buddy struct {
@@ -25,7 +31,7 @@ type Buddy struct {
 type TodoServiceImpl interface {
 	Get(id int64) (Todo, error)
 	GetAll() ([]Todo, error)
-	New(todos []Todo) ([]Todo, error)
+	New(todo RawTodo, user User) (Todo, error)
 	AddBuddy(todo *Todo, buddy *User) (*Todo, error)
 }
 
@@ -54,13 +60,18 @@ func (s *TodoService) GetAll() ([]Todo, error) {
 	return todos, nil
 }
 
-func (s *TodoService) New(todos []Todo) ([]Todo, error) {
-	built := make([]Todo, len(todos))
-	for i, v := range todos {
-		built[i] = s.decorateNewTodo(v, s.Snowflake)
+func (s *TodoService) New(todo RawTodo, user User) (Todo, error) {
+	built := s.decorateNewTodo(todo, user, s.Snowflake)
+
+	fmt.Println(built)
+
+	create := s.DB.Create(&built)
+
+	if create.Error != nil {
+		fmt.Println(create.Error)
+		return built, create.Error
 	}
 
-	s.DB.Create(&built)
 	res := s.DB.Save(&built)
 
 	if res.Error != nil {
@@ -69,10 +80,11 @@ func (s *TodoService) New(todos []Todo) ([]Todo, error) {
 	return built, nil
 }
 
-func (s *TodoService) decorateNewTodo(i Todo, snowflake *snowflake.Node) Todo {
+func (s *TodoService) decorateNewTodo(i RawTodo, user User, snowflake *snowflake.Node) Todo {
 	processed := Todo{
 		ID:        snowflake.Generate().Int64(),
 		Title:     i.Title,
+		Owner:     user,
 		Completed: i.Completed,
 	}
 

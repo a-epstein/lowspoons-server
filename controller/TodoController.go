@@ -2,7 +2,9 @@ package controller
 
 import (
 	"fmt"
+	"strconv"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/lowspoons-server/model"
 
 	"github.com/kataras/iris"
@@ -22,8 +24,8 @@ type TodoController struct {
 func (c *TodoController) BeforeActivation(b mvc.BeforeActivation) {
 	// this could be binded to a controller's function input argument
 	// if any, or struct field if any:
-	b.Dependencies().Add(func(ctx iris.Context) (items []model.Todo) {
-		ctx.ReadJSON(&items)
+	b.Dependencies().Add(func(ctx iris.Context) (item model.RawTodo) {
+		ctx.ReadJSON(&item)
 		return
 	})
 }
@@ -59,13 +61,33 @@ type PostItemResponse struct {
 var emptyResponse = PostItemResponse{Success: false}
 
 // Post handles the POST: /todos route.
-func (c *TodoController) Post(rawTodos []model.Todo) PostItemResponse {
+func (c *TodoController) Post(ctx iris.Context, rawTodo model.RawTodo) PostItemResponse {
+	token := ctx.Values().Get("jwt").(*jwt.Token)
 
-	if _, err := c.Service.New(rawTodos); err != nil {
-		return emptyResponse
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		ids := claims["jti"].(string)
+		id, cerr := strconv.ParseInt(ids, 10, 64)
+
+		if cerr != nil {
+			fmt.Println("incorrect id format")
+			return emptyResponse
+		}
+
+		owner, error := c.UserService.GetBySession(id)
+
+		if error != nil {
+			fmt.Println("user not found")
+			return emptyResponse
+		}
+
+		if _, err := c.Service.New(rawTodo, owner); err != nil {
+			return emptyResponse
+		}
+
+		return PostItemResponse{Success: true}
 	}
 
-	return PostItemResponse{Success: true}
+	return emptyResponse
 }
 
 func (c *TodoController) PutBy(ctx iris.Context, id int64) interface{} {
